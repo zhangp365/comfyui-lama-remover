@@ -3,8 +3,14 @@ import torch
 from ..utils import cropimage, padimage, padmask, tensor2pil, pil2tensor, cropimage, pil2comfy
 from ..lama import model
 from torchvision import transforms
+import time
+import logging
+logger = logging.getLogger(__file__)
 
 class LamaRemover:
+    def __init__(self) -> None:
+        self.mylama = model.BigLama()
+
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -22,15 +28,14 @@ class LamaRemover:
     RETURN_TYPES = ("IMAGE",)
     FUNCTION = "lama_remover"
 
-    def lama_remover(self, images, masks, mask_threshold, gaussblur_radius, invert_mask):
-        mylama = model.BigLama()
+    def lama_remover(self, images, masks, mask_threshold, gaussblur_radius, invert_mask):        
         ten2pil = transforms.ToPILImage()
 
         results=[]
         
         for image, mask in zip(images, masks):
             ori_image = tensor2pil(image)
-            print(f"input image size :{ori_image.size}")
+            logger.debug(f"input image size :{ori_image.size}")
 
             w, h = ori_image.size
             p_image = padimage(ori_image)
@@ -39,12 +44,12 @@ class LamaRemover:
             mask = mask.unsqueeze(0)
             ori_mask = ten2pil(mask)
             ori_mask = ori_mask.convert('L')
-            print(f"input mask size :{ori_mask.size}")
+            logger.debug(f"input mask size :{ori_mask.size}")
 
             p_mask = padmask(ori_mask)
 
             if p_mask.size != p_image.size:
-                print("resize mask")
+                logger.debug("resize mask")
                 p_mask = p_mask.resize(p_image.size)
 
             # invert mask
@@ -54,7 +59,8 @@ class LamaRemover:
             
             # gaussian Blur
             # 高斯模糊遮罩（模糊的是白色）
-            p_mask = p_mask.filter(ImageFilter.GaussianBlur(radius=gaussblur_radius))
+            if gaussblur_radius > 0:
+                p_mask = p_mask.filter(ImageFilter.GaussianBlur(radius=gaussblur_radius))
 
             # mask_threshold
             # 遮罩阈值，越大越强
@@ -64,21 +70,20 @@ class LamaRemover:
 
             # lama
             # lama模型
-            result = mylama(pt_image, pt_mask)
-
-            img_result = ten2pil(result)
-
-            # crop into the original size
+            start = time.time()
+            result = self.mylama(pt_image, pt_mask)
+            logger.debug(f"lama reference cost:{time.time() - start}")
+            
             # 裁剪成输入大小
-            x, y = img_result.size
-            if x > w or y > h:
-                img_result = cropimage(img_result, w, h)
+            _, result_h, result_w = result.size()
 
-            # turn to comfyui tensor
-            # 变成comfyui格式（i,h,w,c）
-            i = pil2comfy(img_result)
+            if result_h > h or result_w > w:
+                result = result[:, :h, :w]  # 裁剪结果Tensor
+
+            # 转换为ComfyUI格式 (i, h, w, c)
+            i = result.permute(1, 2, 0).unsqueeze(0).cpu()  # 将Tensor维度从 (channels, height, width) 变为 (height, width, channels)
             results.append(i)
-       
+
         return (torch.cat(results, dim=0),)
 
 
@@ -102,14 +107,13 @@ class LamaRemoverIMG:
     FUNCTION = "lama_remover_IMG"
 
     def lama_remover_IMG(self, images, masks, mask_threshold, gaussblur_radius, invert_mask):
-        mylama = model.BigLama()
         ten2pil = transforms.ToPILImage()
 
         results=[]
         
         for image, mask in zip(images, masks):
             ori_image = tensor2pil(image)
-            print(f"input image size :{ori_image.size}")
+            logger.debug(f"input image size :{ori_image.size}")
 
             w, h = ori_image.size
             p_image = padimage(ori_image)
@@ -118,12 +122,12 @@ class LamaRemoverIMG:
             mask = mask.movedim(0, -1).movedim(0,-1)
             ori_mask = ten2pil(mask)
             ori_mask = ori_mask.convert('L')
-            print(f"input mask size :{ori_mask.size}")
+            logger.debug(f"input mask size :{ori_mask.size}")
 
             p_mask = padmask(ori_mask)
 
             if p_mask.size != p_image.size:
-                print("resize mask")
+                logger.debug("resize mask")
                 p_mask = p_mask.resize(p_image.size)
 
             # invert mask
@@ -143,7 +147,9 @@ class LamaRemoverIMG:
 
             # lama
             # lama模型
-            result = mylama(pt_image, pt_mask)
+            start = time.time()
+            result = self.mylama(pt_image, pt_mask)
+            logger.debug(f"lama reference cost:{time.time() - start}")
 
             img_result = ten2pil(result)
 
