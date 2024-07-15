@@ -17,11 +17,11 @@ class BigLama:
         print(f"{model_path}, lama device:{self.device}")
 
         try:
-            self.model = torch.load(model_path, map_location=self.device)
+            self.model = torch.jit.load(model_path, map_location=self.device)
         except:
             print(f"can't use comfy device")
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
-            self.model = torch.load(model_path, map_location=self.device)
+            self.model = torch.jit.load(model_path, map_location=self.device)
         
         self.model.eval()
         self.model.to(self.device)

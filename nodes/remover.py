@@ -1,7 +1,8 @@
 from PIL import ImageOps, ImageFilter
 import torch
 from ..utils import cropimage, padimage, padmask, tensor2pil, pil2tensor, cropimage, pil2comfy
-from ..lama import model
+from ..lama.lama import LamaModel
+from ..lama.model import BigLama
 from torchvision import transforms
 import time
 import logging
@@ -9,7 +10,7 @@ logger = logging.getLogger(__file__)
 
 class LamaRemover:
     def __init__(self) -> None:
-        self.mylama = model.BigLama()
+        self.mylama = BigLama()
 
     @classmethod
     def INPUT_TYPES(s):
@@ -81,7 +82,9 @@ class LamaRemover:
                 result = result[:, :h, :w]  # 裁剪结果Tensor
 
             # 转换为ComfyUI格式 (i, h, w, c)
+            start = time.time()
             i = result.permute(1, 2, 0).unsqueeze(0).cpu()  # 将Tensor维度从 (channels, height, width) 变为 (height, width, channels)
+            logger.debug(f"lama unsqueeze(0).cpu() cost:{time.time() - start}")
             results.append(i)
 
         return (torch.cat(results, dim=0),)
