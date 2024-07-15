@@ -76,12 +76,11 @@ class LamaRemover:
             
             # 裁剪成输入大小
             _, result_h, result_w = result.size()
-
             if result_h > h or result_w > w:
-                result = result[:, :h, :w]  # 裁剪结果Tensor
+                result = result[:, :h, :w]  
 
             # 转换为ComfyUI格式 (i, h, w, c)
-            i = result.permute(1, 2, 0).unsqueeze(0).cpu()  # 将Tensor维度从 (channels, height, width) 变为 (height, width, channels)
+            i = result.permute(1, 2, 0).unsqueeze(0) 
             results.append(i)
 
         return (torch.cat(results, dim=0),)
